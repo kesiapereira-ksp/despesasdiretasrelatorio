@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from fpdf import FPDF
-import io
 
 st.set_page_config(page_title="Gerador de Relatórios", layout="centered")
 
@@ -40,7 +39,6 @@ if arquivo_excel is not None:
                 if 'ITEM' in df_relatorio.columns:
                     df_relatorio['ITEM'] = df_relatorio['ITEM'].apply(lambda x: f"{int(x):03d}" if pd.notnull(x) else "")
 
-                # Criação do PDF usando FPDF (sem depender de wkhtmltopdf)
                 class PDF(FPDF):
                     def header(self):
                         self.set_font("helvetica", "B", 12)
@@ -51,46 +49,37 @@ if arquivo_excel is not None:
                         self.cell(0, 6, f"Período: {competencia}", align="C", new_x="LMARGIN", new_y="NEXT")
                         self.ln(5)
 
-                # L = Landscape (Paisagem)
                 pdf = PDF(orientation="L", unit="mm", format="A4")
                 pdf.add_page()
                 pdf.set_font("helvetica", size=7)
                 
-                # Cabeçalho da Tabela
                 headers = df_relatorio.columns.tolist()
                 
-                # Calcular larguras das colunas (total A4 landscape tem ~277mm de largura útil)
-                larguras = [10, 50, 150, 25, 42] # Ajuste fino das colunas
-                # Se não houver 5 colunas, distribui por igual
+                larguras = [10, 50, 150, 25, 42]
                 if len(headers) != 5:
                     larguras = [277/len(headers)] * len(headers)
 
-                # Desenhar cabeçalho
                 pdf.set_fill_color(230, 230, 230)
                 pdf.set_font("helvetica", "B", 7)
                 for i, heading in enumerate(headers):
                     pdf.cell(larguras[i], 6, str(heading)[:100], border=1, align="C", fill=True)
                 pdf.ln()
 
-                # Desenhar linhas de dados
                 pdf.set_font("helvetica", size=7)
                 for index, row in df_relatorio.iterrows():
-                    # Para linhas com texto muito longo, podemos usar multi_cell se necessário, 
-                    # mas para manter alinhado usaremos cell truncando ligeiramente ou ajustando o texto
                     for i, col_name in enumerate(headers):
                         texto = str(row[col_name])
-                        # Truncar o histórico se for gigante para caber na linha (opcional)
                         if i == 2 and len(texto) > 110:
                             texto = texto[:107] + "..."
                         
-                        align = "R" if i >= 3 else "L" # Números alinhados à direita
-                        align = "C" if i == 0 else align # Item centrado
+                        align = "R" if i >= 3 else "L" 
+                        align = "C" if i == 0 else align 
                         
                         pdf.cell(larguras[i], 5, texto, border=1, align=align)
                     pdf.ln()
 
-                # Gerar ficheiro em memória (bytes)
-                pdf_bytes = pdf.output(dest="S").encode("latin-1", "ignore")
+                # A LINHA CORRIGIDA ESTÁ AQUI:
+                pdf_bytes = bytes(pdf.output())
 
                 nome_limpo = nome_contrato.replace(' - ', '_').replace(' ', '_').replace('/', '-')
                 nome_arquivo_pdf = f"Relatorio_{nome_limpo}_{competencia.replace(' ', '_')}.pdf"
