@@ -77,4 +77,13 @@ if arquivo_excel is not None:
                         pdf.set_font("helvetica", "B", 10)
                         pdf.cell(0, 6, "DEMONSTRATIVO FINANCEIRO DESPESA PORMENORIZADO", align="C", new_x="LMARGIN", new_y="NEXT")
                         pdf.cell(0, 6, f"DESPESAS DIRETAS - {nome_contrato}", align="C", new_x="LMARGIN", new_y="NEXT")
-                        pdf.cell(0, 6, f
+                        pdf.cell(0, 6, f"Período: {competencia}", align="C", new_x="LMARGIN", new_y="NEXT")
+                        pdf.ln(5)
+
+                        colunas_relatorio = ['Conta contabil', 'HISTORICO', 'Total Geral', nome_contrato]
+                        colunas_existentes = [col for col in colunas_relatorio if col in df_filtrado.columns]
+                        
+                        total_geral_calc = df_filtrado['Total Geral'].sum()
+                        total_projeto_calc = df_filtrado[nome_contrato].sum()
+                        
+                        nova_linha_total = pd.
