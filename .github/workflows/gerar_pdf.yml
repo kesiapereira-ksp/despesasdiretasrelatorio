@@ -1,0 +1,34 @@
+name: Gerador de Relatorio PDF
+
+on:
+  push:
+    paths:
+      - 'dados/**.xlsx'
+  workflow_dispatch:
+
+jobs:
+  gerar-pdf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Instalar conversor de PDF do sistema
+        run: sudo apt-get install -y wkhtmltopdf
+
+      - name: Instalar bibliotecas Python
+        run: pip install -r requirements.txt
+
+      - name: Executar o script
+        run: python gerar_relatorio.py
+
+      - name: Disponibilizar PDF para download
+        uses: actions/upload-artifact@v3
+        with:
+          name: Relatorio-PDF-Final
+          path: '*.pdf'
