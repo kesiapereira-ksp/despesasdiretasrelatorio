@@ -5,38 +5,55 @@ import pdfkit
 # Configuração da página web
 st.set_page_config(page_title="Gerador de Relatórios", layout="centered")
 
-st.title("Gerador de Relatório PDF - Despesas Diretas")
-st.write("Faça o upload da sua planilha Excel para gerar o relatório em PDF com as despesas zeradas removidas.")
+st.title("Gerador de Relatório PDF - Despesas DIretas")
+st.write("Faça o upload da sua planilha Excel, selecione o contrato através das colunas e gere o relatório em PDF (as despesas zeradas serão removidas).")
 
-# 1. Campos para o utilizador preencher (pode alterar no ecrã antes de gerar)
-nome_contrato = st.text_input("Nome da Coluna do Contrato (exato como está no Excel)", value="Cejam - Apoio à Gestão")
-competencia = st.text_input("Competência / Período", value="Setembro de 2026")
+# 1. Carregar o ficheiro Excel
+arquivo_excel = st.file_uploader("1. Carregue a sua planilha Excel (.xlsx)", type=["xlsx"])
 
-# 2. Botão para carregar o ficheiro Excel
-arquivo_excel = st.file_uploader("Carregue a sua planilha Excel (.xlsx)", type=["xlsx"])
-
-# Só executa se o utilizador tiver carregado um ficheiro
 if arquivo_excel is not None:
-    if st.button("Processar e Gerar PDF"):
-        try:
-            # Ler a planilha diretamente do ficheiro carregado
-            df = pd.read_excel(arquivo_excel)
+    try:
+        # Ler a planilha
+        df = pd.read_excel(arquivo_excel)
+        
+        # Identificar as colunas que representam os projetos/contratos
+        # Excluímos as colunas base para que apenas os nomes dos projetos apareçam nas opções
+        colunas_base = ['ITEM', 'Conta contabil', 'HISTORICO', 'Total Geral', 'Total Geral.1']
+        colunas_projetos = [col for col in df.columns if col not in colunas_base]
+        
+        st.write("---")
+        st.write("### Configuração do Relatório")
+        
+        # 2. Dropdown para o utilizador escolher o projeto com base nas colunas do próprio Excel carregado
+        nome_contrato = st.selectbox("2. Selecione o Contrato / Projeto:", options=colunas_projetos)
+        
+        # 3. Campo de Competência
+        competencia = st.text_input("3. Competência / Período:", value="Setembro de 2026")
+        
+        if st.button("Gerar PDF"):
+            # Garantir que a coluna escolhida é numérica e filtrar apenas os valores > 0
+            df[nome_contrato] = pd.to_numeric(df[nome_contrato], errors='coerce').fillna(0)
+            df_filtrado = df[df[nome_contrato] > 0].copy()
             
-            # Verificar se a coluna digitada realmente existe na planilha
-            if nome_contrato not in df.columns:
-                st.error(f"A coluna '{nome_contrato}' não foi encontrada na planilha. Verifique os espaços ou letras maiúsculas/minúsculas.")
+            if df_filtrado.empty:
+                st.warning(f"O contrato '{nome_contrato}' não possui despesas maiores que zero.")
             else:
-                # 3. Garantir que a coluna é numérica e filtrar os valores zerados
-                df[nome_contrato] = pd.to_numeric(df[nome_contrato], errors='coerce').fillna(0)
-                df_filtrado = df[df[nome_contrato] > 0].copy()
+                # Filtrar apenas as colunas essenciais para o relatório em PDF
+                colunas_relatorio = ['ITEM', 'Conta contabil', 'HISTORICO', 'Total Geral', nome_contrato]
                 
-                # 4. Formatar os valores para o padrão brasileiro (R$)
-                df_filtrado[nome_contrato] = df_filtrado[nome_contrato].apply(lambda x: f"{x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-                if 'Total Geral' in df_filtrado.columns:
-                    df_filtrado['Total Geral'] = df_filtrado['Total Geral'].apply(lambda x: f"{x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                # Tentar garantir que todas as colunas existem (caso falte o ITEM ou HISTORICO, não quebra o código)
+                colunas_existentes = [col for col in colunas_relatorio if col in df_filtrado.columns]
+                df_relatorio = df_filtrado[colunas_existentes].copy()
 
-                # 5. Criar a estrutura HTML
-                html_tabela = df_filtrado.to_html(index=False, justify='center')
+                # Formatação visual (Dinheiro com R$ e remover casas decimais do ITEM)
+                df_relatorio[nome_contrato] = df_relatorio[nome_contrato].apply(lambda x: f"{x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                if 'Total Geral' in df_relatorio.columns:
+                    df_relatorio['Total Geral'] = df_relatorio['Total Geral'].apply(lambda x: f"{x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+                if 'ITEM' in df_relatorio.columns:
+                    df_relatorio['ITEM'] = df_relatorio['ITEM'].apply(lambda x: f"{int(x):03d}" if pd.notnull(x) else "")
+
+                # 4. Criar a estrutura HTML
+                html_tabela = df_relatorio.to_html(index=False, justify='center')
                 html_conteudo = f"""
                 <html>
                 <head>
@@ -52,29 +69,30 @@ if arquivo_excel is not None:
                 <body>
                     <h2>CEJAM</h2>
                     <h3>DEMONSTRATIVO FINANCEIRO DESPESA PORMENORIZADO</h3>
-                    <h3>DESPESAS DIRETAS</h3>
-                    <h3>Período {competencia}</h3>
+                    <h3>DESPESAS DIRETAS - {nome_contrato}</h3>
+                    <h3>Período: {competencia}</h3>
                     {html_tabela}
                 </body>
                 </html>
                 """
 
-                # 6. Configurar o PDF em modo Paisagem
+                # 5. Configurar o PDF em modo Paisagem
                 opcoes = {
                     'page-size': 'A4',
                     'orientation': 'Landscape',
                     'encoding': "UTF-8",
                 }
                 
-                # Gerar o PDF na memória (passando 'False' em vez de um nome de ficheiro para guardar)
+                # Gerar o PDF na memória
                 pdf_bytes = pdfkit.from_string(html_conteudo, False, options=opcoes)
                 
-                # Nome que o ficheiro terá ao ser descarregado
-                nome_arquivo_pdf = f"Relatorio_{nome_contrato.replace(' - ', '_').replace(' ', '_')}_{competencia.replace(' ', '_')}.pdf"
+                # Nome do ficheiro final a ser descarregado (Limpa caracteres inválidos como as barras de datas)
+                nome_limpo = nome_contrato.replace(' - ', '_').replace(' ', '_').replace('/', '-')
+                nome_arquivo_pdf = f"Relatorio_{nome_limpo}_{competencia.replace(' ', '_')}.pdf"
 
-                st.success("PDF gerado com sucesso!")
+                st.success("PDF gerado com sucesso! Clique no botão abaixo para o descarregar.")
                 
-                # 7. Criar o botão de download para o utilizador descarregar o ficheiro
+                # 6. Criar o botão de download
                 st.download_button(
                     label="📥 Descarregar Relatório em PDF",
                     data=pdf_bytes,
@@ -82,5 +100,5 @@ if arquivo_excel is not None:
                     mime="application/pdf"
                 )
                 
-        except Exception as e:
-            st.error(f"Ocorreu um erro ao processar o ficheiro: {e}")
+    except Exception as e:
+        st.error(f"Ocorreu um erro ao processar a planilha: {e}")
